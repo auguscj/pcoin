@@ -2,32 +2,27 @@ import json
 
 # 定义递归函数
 def extract_values(json_obj, keys_to_find):
-    results = {}  # 用于存储找到的键值对
+    results = {key: None for key in keys_to_find}  # 初始化所有键为 None
     
-    if isinstance(json_obj, dict):  # 如果是字典
-        for key, value in json_obj.items():
-            if key in keys_to_find:  # 如果键匹配
-                results[key] = value
-            if isinstance(value, (dict, list)):  # 如果值是嵌套字典或列表，继续递归
-                results.update(extract_values(value, keys_to_find))
+    def _recursive_search(obj):
+        if isinstance(obj, dict):  # 如果是字典
+            for key, value in obj.items():
+                if key in keys_to_find:  # 如果键匹配
+                    results[key] = value
+                if isinstance(value, (dict, list)):  # 如果值是嵌套字典或列表，继续递归
+                    _recursive_search(value)
+        elif isinstance(obj, list):  # 如果是列表
+            for item in obj:
+                _recursive_search(item)
     
-    elif isinstance(json_obj, list):  # 如果是列表
-        for item in json_obj:
-            results.update(extract_values(item, keys_to_find))
-    
+    _recursive_search(json_obj)  # 开始递归
     return results
 
-# 示例 JSON 数据
+# 示例 JSON 数据（没有目标字段）
 json_data = '''
 {
     "name": "example",
-    "website": "https://example.com",
-    "socials": {
-        "twitter": "@example",
-        "other": {
-            "telegram": "example_chat"
-        }
-    },
+    "description": "This is a test case.",
     "tags": ["news", "blog"]
 }
 '''
