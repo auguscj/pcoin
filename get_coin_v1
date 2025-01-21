@@ -26,7 +26,7 @@ coin_creator = 'https://frontend-api-v2.pump.fun/coins/user-created-coins/creato
 
 async def subscribe():
     async with aiosqlite.connect("coins.db") as db:
-        timeout = aiohttp.ClientTimeout(total=5)
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             uri = "wss://pumpportal.fun/api/data"
             async with websockets.connect(uri) as websocket:
@@ -36,17 +36,24 @@ async def subscribe():
                 await websocket.send(json.dumps(payload))
                 async for message in websocket:
                     result = json.loads(message)
+                    logging.error(f"Begin to get {result}")
                     await extract_coin_detail_from_message(result,session,db)
 
-async def fetch_json(session,url):
+async def fetch_json(session,url,url_type="pump"):
     try:
         async with session.get(url) as response:
-            if response.status_code==200:
-                return await response.json()
+            if url_type=="pump":
+                if response.statusCode==200:
+                    return await response.json()
+                else:
+                    logging.error(f"Fail to fetch {url},status:{response}")
             else:
-                print(f"Fail to fetch {url},status:{response.status}")
+                if response.status==200:
+                    return await response.json()
+                else:
+                    logging.error(f"Fail to fetch {url},status:{response}")
     except Exception as e:
-        print(f"Error fetching {url}:{e}")
+        logging.error(f"Error fetching {url}:{e}")
     return None
 
 
@@ -69,8 +76,8 @@ def extract_values(json_obj, keys_to_find):
 
 async def extract_coin_detail_from_message(pump_message,session,db):
     try:
-        coin_info = {}
-        logging.error(f"Begin to filter {pump_message['mint']}")
+
+        logging.error(f"Begin to extract_coin_detail_from_message {pump_message['mint']}")
         ipfs_uri = pump_message['uri']
         mint = pump_message['mint']
         coin_name = pump_message['symbol']
@@ -84,20 +91,23 @@ async def extract_coin_detail_from_message(pump_message,session,db):
         website = None
         telegram = None
         twitter = None
-        if coin_detail_json:
+        if coin_detail_json and coin_detail_json:
+            logging.error(f"success call api {pump_url}")
             # creator = coin_detail_json['creator']
             twitter = coin_detail_json['twitter']
             telegram = coin_detail_json['telegram']
             website = coin_detail_json['website']
         else:
-            coin_detail_json = await fetch_json(session, ipfs_uri)
+            coin_detail_json = await fetch_json(session, ipfs_uri,"ifps")
             if coin_detail_json:
+                logging.error(f"pump api fail, success call api {ipfs_uri}: {coin_detail_json}")
                 keys = {"website", "twitter", "telegram"}
                 found_value = extract_values(coin_detail_json,keys)
                 website = found_value['website']
                 twitter = found_value['twitter']
                 telegram = found_value['telegram']
-
+            else:
+                logging.error("Both pump/ifps api call fail,ignore current coin")
         # bondingCurveKey = pump_message['bondingCurveKey']
         # price_dic = await get_price(mint,bondingCurveKey)
         # price = price_dic['price']
@@ -108,11 +118,13 @@ async def extract_coin_detail_from_message(pump_message,session,db):
         logging.error(sql)
         await db.execute(sql)
         await  db.commit()
-        logging.error(f"Found coin : {str(coin_info)}")
-
+        logging.error(f" extract_coin_detail_from_message finish ")
+    except KeyError:
+        pass
     except Exception as e:
         logging.error(f"extract_coin_detail_from_message error:{e}")
 
+    logging.error("\n")
 
 def coin_filter(mint):
     try:
